@@ -65,10 +65,16 @@
       return '★'.repeat(n) + '☆'.repeat(5 - n);
     }
 
+    function rowBg(n) {
+      if (n >= 4) return 'bg-green-50 hover:bg-green-100';
+      if (n === 3) return 'bg-yellow-50 hover:bg-yellow-100';
+      return 'bg-red-50 hover:bg-red-100';
+    }
+
     function ratingClass(n) {
-      if (n >= 4) return 'text-green-600';
-      if (n === 3) return 'text-yellow-500';
-      return 'text-red-500';
+      if (n >= 4) return 'text-green-700';
+      if (n === 3) return 'text-yellow-700';
+      return 'text-red-700';
     }
 
     function render() {
@@ -110,7 +116,7 @@
       }
 
       const rows = filtered.map(e => `
-        <tr class="border-t border-gray-100 hover:bg-gray-50">
+        <tr class="border-t border-gray-100 ${rowBg(e.rating)}">
           <td class="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">${formatDate(e.timestamp)}</td>
           <td class="px-4 py-3 text-sm font-medium text-gray-800">${e.location}</td>
           <td class="px-4 py-3 text-sm font-mono ${ratingClass(e.rating)}" title="${e.rating}/5">${stars(e.rating)}</td>
