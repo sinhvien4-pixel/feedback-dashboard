@@ -47,6 +47,14 @@
       </div>
     </div>
 
+    <!-- Export button -->
+    <div class="flex justify-end mb-3">
+      <button id="exportBtn"
+        class="bg-gray-700 hover:bg-gray-900 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+        ⬇ Xuất CSV
+      </button>
+    </div>
+
     <div id="tableWrap"></div>
   </div>
 
@@ -77,17 +85,16 @@
       return 'text-red-700';
     }
 
-    function render() {
+    function getFiltered() {
       const all = JSON.parse(localStorage.getItem('feedbackEntries') || '[]');
       const sorted = [...all].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
       const location  = document.getElementById('filterLocation').value;
       const minRating = Number(document.getElementById('filterRating').value);
-      const fromVal   = document.getElementById('filterFrom').value;   // 'YYYY-MM-DD' or ''
+      const fromVal   = document.getElementById('filterFrom').value;
       const toVal     = document.getElementById('filterTo').value;
-
-      const fromDate = fromVal ? new Date(fromVal + 'T00:00:00') : null;
-      const toDate   = toVal   ? new Date(toVal   + 'T23:59:59') : null;
+      const fromDate  = fromVal ? new Date(fromVal + 'T00:00:00') : null;
+      const toDate    = toVal   ? new Date(toVal   + 'T23:59:59') : null;
 
       const filtered = sorted.filter(e => {
         if (location && e.location !== location) return false;
@@ -97,6 +104,43 @@
         if (toDate   && ts > toDate)   return false;
         return true;
       });
+
+      return { all: sorted, filtered };
+    }
+
+    function exportCsv() {
+      const { filtered } = getFiltered();
+      if (filtered.length === 0) {
+        alert('Không có dữ liệu để xuất.');
+        return;
+      }
+
+      const escape = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+      const today  = new Date().toISOString().slice(0, 10);
+
+      const lines = [
+        'Date,Location,Rating,Name,Comment',
+        ...filtered.map(e => [
+          escape(formatDate(e.timestamp)),
+          escape(e.location),
+          e.rating,
+          escape(e.name || ''),
+          escape(e.comment),
+        ].join(','))
+      ];
+
+      // UTF-8 BOM so Excel opens Vietnamese text correctly
+      const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = `feedback-export-${today}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function render() {
+      const { all: sorted, filtered } = getFiltered();
 
       const wrap = document.getElementById('tableWrap');
 
@@ -144,6 +188,8 @@
     ['filterLocation', 'filterRating', 'filterFrom', 'filterTo'].forEach(id => {
       document.getElementById(id).addEventListener('change', render);
     });
+
+    document.getElementById('exportBtn').addEventListener('click', exportCsv);
 
     render();
   </script>
