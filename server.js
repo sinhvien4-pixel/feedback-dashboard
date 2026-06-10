@@ -4,13 +4,17 @@ const express  = require("express");
 const cors     = require("cors");
 const admin    = require("firebase-admin");
 
-admin.initializeApp({
-  credential: admin.credential.cert({
-    projectId:   process.env.FIREBASE_PROJECT_ID,
-    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-    privateKey:  process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
-  }),
-});
+// FIREBASE_SERVICE_ACCOUNT = toàn bộ service account JSON trên 1 dòng (dùng cho Vercel)
+// Fallback: các biến riêng lẻ FIREBASE_PROJECT_ID / CLIENT_EMAIL / PRIVATE_KEY
+const credential = process.env.FIREBASE_SERVICE_ACCOUNT
+  ? admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT))
+  : admin.credential.cert({
+      projectId:   process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey:  (process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n"),
+    });
+
+admin.initializeApp({ credential });
 
 const db         = admin.firestore();
 const COLLECTION = "feedback";
