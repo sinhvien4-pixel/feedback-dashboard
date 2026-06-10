@@ -1,4 +1,5 @@
 require("dotenv").config({ path: require("path").join(__dirname, "../.env") });
+const path     = require("path");
 const express  = require("express");
 const cors     = require("cors");
 const admin    = require("firebase-admin");
@@ -54,9 +55,20 @@ app.get("/api/feedback", async (req, res) => {
   }
 });
 
+// Serve static files (HTML, CSS, JS) — must be AFTER API routes
+app.use(express.static(path.join(__dirname)));
+
+// Fallback: redirect root to submit page
+app.get("/", (req, res) => res.redirect("/pages/submit.html"));
+
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => console.log(`Server chạy tại http://localhost:${PORT}`));
+  app.listen(PORT, () => {
+    console.log(`Server chạy tại http://localhost:${PORT}`);
+    console.log(`→ Submit : http://localhost:${PORT}/pages/submit.html`);
+    console.log(`→ Admin  : http://localhost:${PORT}/pages/admin.html`);
+    console.log(`→ Login  : http://localhost:${PORT}/pages/login.html`);
+  });
 }
 
 module.exports = app;
