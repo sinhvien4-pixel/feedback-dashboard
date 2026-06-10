@@ -32,6 +32,7 @@
         <input
           id="name" name="name" type="text"
           placeholder="Nguyễn Văn A"
+          maxlength="100"
           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
         />
       </div>
@@ -77,6 +78,7 @@
         <textarea
           id="comment" name="comment" required rows="4"
           placeholder="Chia sẻ trải nghiệm của bạn..."
+          maxlength="1000"
           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-y"
         ></textarea>
         <p id="commentError" class="hidden mt-1 text-xs text-red-500">Vui lòng nhập nhận xét.</p>
@@ -93,7 +95,14 @@
     </form>
   </div>
 
-  <script>
+  <script type="module">
+    import { db } from "../shared/firebase.js";
+    import { collection, addDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    const VALID_LOCATIONS = ['Hà Nội', 'Đà Nẵng', 'TP.HCM'];
+    const COOLDOWN_MS = 60_000;
+    let lastSubmitTime = 0;
+
     // --- Star widget ---
     const stars = document.querySelectorAll('.star-btn');
     const ratingInput = document.getElementById('rating');
@@ -111,8 +120,12 @@
       star.addEventListener('mouseleave', () => setStars(Number(ratingInput.value) || 0));
     });
 
+    function showError(id, show) {
+      document.getElementById(id).classList.toggle('hidden', !show);
+    }
+
     // --- Form submit ---
-    document.getElementById('feedbackForm').addEventListener('submit', function (e) {
+    document.getElementById('feedbackForm').addEventListener('submit', async function (e) {
       e.preventDefault();
 
       const location = document.getElementById('location').value.trim();
@@ -120,45 +133,77 @@
       const comment  = document.getElementById('comment').value.trim();
       const name     = document.getElementById('name').value.trim();
 
-      // Validate
+      // Frontend validation
       let valid = true;
+      showError('locationError', !location || !VALID_LOCATIONS.includes(location));
+      if (!location || !VALID_LOCATIONS.includes(location)) valid = false;
 
-      document.getElementById('locationError').classList.toggle('hidden', !!location);
-      if (!location) valid = false;
-
-      document.getElementById('ratingError').classList.toggle('hidden', !!rating);
+      showError('ratingError', !rating);
       if (!rating) valid = false;
 
-      document.getElementById('commentError').classList.toggle('hidden', !!comment);
+      showError('commentError', !comment);
       if (!comment) valid = false;
 
       if (!valid) return;
 
-      // Build entry
+      // Cooldown check (prevent duplicate rapid submissions)
+      const now = Date.now();
+      if (now - lastSubmitTime < COOLDOWN_MS) {
+        const remaining = Math.ceil((COOLDOWN_MS - (now - lastSubmitTime)) / 1000);
+        showErrorBanner(`Vui lòng đợi ${remaining} giây trước khi gửi lại.`);
+        return;
+      }
+
+      const submitBtn = this.querySelector('[type="submit"]');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Đang gửi...';
+      hideErrorBanner();
+
       const entry = {
-        id:        Date.now(),
-        name:      name || null,
+        name:      name.slice(0, 100) || null,
         location,
         rating:    Number(rating),
-        comment,
-        date:      new Date().toLocaleDateString('vi-VN'), // DD/MM/YYYY
+        comment:   comment.slice(0, 1000),
         timestamp: new Date().toISOString(),
       };
 
-      // Append to localStorage
-      const existing = JSON.parse(localStorage.getItem('feedbackEntries') || '[]');
-      existing.push(entry);
-      localStorage.setItem('feedbackEntries', JSON.stringify(existing));
+      try {
+        await addDoc(collection(db, 'feedback'), entry);
+        lastSubmitTime = Date.now();
 
-      // Success UI
-      document.getElementById('successMsg').classList.remove('hidden');
-      this.reset();
-      ratingInput.value = '';
-      setStars(0);
-
-      // Hide success message after 4s
-      setTimeout(() => document.getElementById('successMsg').classList.add('hidden'), 4000);
+        document.getElementById('successMsg').classList.remove('hidden');
+        this.reset();
+        ratingInput.value = '';
+        setStars(0);
+        setTimeout(() => document.getElementById('successMsg').classList.add('hidden'), 5000);
+      } catch (err) {
+        console.error('Firestore write error:', err);
+        const msg = err.code === 'permission-denied'
+          ? 'Không có quyền gửi phản hồi. Liên hệ quản trị viên.'
+          : 'Gửi thất bại. Kiểm tra kết nối mạng và thử lại.';
+        showErrorBanner(msg);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Gửi Phản Hồi';
+      }
     });
+
+    function showErrorBanner(msg) {
+      let banner = document.getElementById('errorBanner');
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'errorBanner';
+        banner.className = 'mb-4 p-4 bg-red-100 border border-red-300 text-red-800 rounded-lg text-sm font-medium';
+        document.getElementById('feedbackForm').before(banner);
+      }
+      banner.textContent = '❌ ' + msg;
+      banner.classList.remove('hidden');
+    }
+
+    function hideErrorBanner() {
+      const banner = document.getElementById('errorBanner');
+      if (banner) banner.classList.add('hidden');
+    }
   </script>
 </body>
 </html>
