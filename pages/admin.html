@@ -60,9 +60,30 @@
   </div>
 
   <script type="module">
-    import { db } from "../shared/firebase.js";
-    import { collection, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { auth, ALLOWED_DOMAIN } from "../shared/firebase-config.js";
+    import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
+    // --- Auth guard ---
+    onAuthStateChanged(auth, (user) => {
+      if (!user || !user.email.endsWith("@" + ALLOWED_DOMAIN)) {
+        window.location.replace("login.html");
+        return;
+      }
+      const emailEl   = document.getElementById('navUserEmail');
+      const logoutBtn = document.getElementById('navLogoutBtn');
+      if (emailEl)   { emailEl.textContent = user.email; emailEl.classList.remove('hidden'); }
+      if (logoutBtn) logoutBtn.classList.remove('hidden');
+    });
+
+    document.addEventListener('click', async (e) => {
+      if (e.target.id === 'navLogoutBtn') {
+        await signOut(auth);
+        window.location.replace("login.html");
+      }
+    });
+  </script>
+
+  <script>
     function esc(v) {
       return String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
@@ -70,7 +91,7 @@
     let allEntries = [];
 
     function formatDate(isoString) {
-      const d = new Date(isoString);
+      const d    = new Date(isoString);
       const dd   = String(d.getDate()).padStart(2, '0');
       const mm   = String(d.getMonth() + 1).padStart(2, '0');
       const yyyy = d.getFullYear();
@@ -79,9 +100,7 @@
       return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
     }
 
-    function stars(n) {
-      return '★'.repeat(n) + '☆'.repeat(5 - n);
-    }
+    function stars(n) { return '★'.repeat(n) + '☆'.repeat(5 - n); }
 
     function rowBg(n) {
       if (n >= 4) return 'bg-green-50 hover:bg-green-100';
@@ -96,7 +115,7 @@
     }
 
     function getFiltered() {
-      const sorted = [...allEntries].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      const sorted = [...allEntries].sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
 
       const location  = document.getElementById('filterLocation').value;
       const minRating = Number(document.getElementById('filterRating').value);
@@ -108,7 +127,7 @@
       const filtered = sorted.filter(e => {
         if (location && e.location !== location) return false;
         if (e.rating < minRating) return false;
-        const ts = new Date(e.timestamp);
+        const ts = new Date(e.submittedAt);
         if (fromDate && ts < fromDate) return false;
         if (toDate   && ts > toDate)   return false;
         return true;
@@ -119,18 +138,14 @@
 
     function exportCsv() {
       const { filtered } = getFiltered();
-      if (filtered.length === 0) {
-        alert('Không có dữ liệu để xuất.');
-        return;
-      }
+      if (filtered.length === 0) { alert('Không có dữ liệu để xuất.'); return; }
 
       const escape = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
       const today  = new Date().toISOString().slice(0, 10);
-
-      const lines = [
+      const lines  = [
         'Date,Location,Rating,Name,Comment',
         ...filtered.map(e => [
-          escape(formatDate(e.timestamp)),
+          escape(formatDate(e.submittedAt)),
           escape(e.location),
           e.rating,
           escape(e.name || ''),
@@ -138,13 +153,10 @@
         ].join(','))
       ];
 
-      // UTF-8 BOM so Excel opens Vietnamese text correctly
       const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement('a');
-      a.href     = url;
-      a.download = `feedback-export-${today}.csv`;
-      a.click();
+      a.href = url; a.download = `feedback-export-${today}.csv`; a.click();
       URL.revokeObjectURL(url);
     }
 
@@ -161,7 +173,6 @@
         wrap.innerHTML = `<div class="text-center py-16 text-gray-400 text-sm">Chưa có phản hồi nào.</div>`;
         return;
       }
-
       if (filtered.length === 0) {
         wrap.innerHTML = summary + `<div class="text-center py-16 text-gray-400 text-sm">Không có phản hồi nào khớp với bộ lọc.</div>`;
         return;
@@ -169,7 +180,7 @@
 
       const rows = filtered.map(e => `
         <tr class="border-t border-gray-100 ${rowBg(e.rating)}">
-          <td class="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">${formatDate(e.timestamp)}</td>
+          <td class="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">${formatDate(e.submittedAt)}</td>
           <td class="px-4 py-3 text-sm font-medium text-gray-800">${esc(e.location)}</td>
           <td class="px-4 py-3 text-sm font-mono ${ratingClass(e.rating)}" title="${esc(String(e.rating))}/5">${stars(e.rating)}</td>
           <td class="px-4 py-3 text-sm text-gray-600">${e.name ? esc(e.name) : '<span class="text-gray-300">—</span>'}</td>
@@ -193,26 +204,29 @@
         </div>`;
     }
 
+    async function loadFeedback() {
+      try {
+        const res = await fetch('/api/feedback');
+        if (!res.ok) throw new Error('Server trả về lỗi ' + res.status);
+        allEntries = await res.json();
+        document.getElementById('errorBanner').classList.add('hidden');
+      } catch (err) {
+        const banner = document.getElementById('errorBanner');
+        banner.textContent = `Không thể tải dữ liệu: ${err.message}`;
+        banner.classList.remove('hidden');
+        console.error(err);
+        return;
+      }
+      render();
+    }
+
     ['filterLocation', 'filterRating', 'filterFrom', 'filterTo'].forEach(id => {
       document.getElementById(id).addEventListener('change', render);
     });
 
     document.getElementById('exportBtn').addEventListener('click', exportCsv);
 
-    const q = query(collection(db, 'feedback'), orderBy('timestamp', 'desc'));
-    onSnapshot(q,
-      (snapshot) => {
-        document.getElementById('errorBanner').classList.add('hidden');
-        allEntries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        render();
-      },
-      (err) => {
-        const banner = document.getElementById('errorBanner');
-        banner.textContent = `Không thể tải dữ liệu: ${err.message}. Kiểm tra Firestore Rules và kết nối mạng.`;
-        banner.classList.remove('hidden');
-        console.error('Firestore onSnapshot error:', err);
-      }
-    );
+    loadFeedback();
   </script>
 </body>
 </html>

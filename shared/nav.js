@@ -6,7 +6,7 @@
   nav.innerHTML = `
     <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
       <span class="text-lg font-semibold text-gray-800">📋 Feedback Dashboard</span>
-      <div class="flex gap-4">
+      <div class="flex items-center gap-4">
         <a href="submit.html"
            class="px-3 py-1.5 rounded text-sm font-medium transition-colors
                   ${currentFile === 'submit.html'
@@ -20,6 +20,15 @@
                     ? 'bg-blue-600 text-white'
                     : 'text-gray-600 hover:bg-gray-100'}">
           Quản Trị
+        </a>
+        <span id="navUserEmail" class="hidden text-xs text-gray-400 max-w-[160px] truncate"></span>
+        <button id="navLogoutBtn"
+          class="hidden text-xs font-medium text-red-500 hover:text-red-700 transition-colors">
+          Đăng xuất
+        </button>
+        <a href="login.html" id="navLoginLink"
+           class="hidden px-3 py-1.5 rounded text-sm font-medium text-blue-600 hover:bg-blue-50 transition-colors">
+          Đăng nhập
         </a>
       </div>
     </div>
